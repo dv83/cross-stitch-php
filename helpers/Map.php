@@ -1,15 +1,20 @@
 <?php
 
-
 namespace app\helpers;
 
 /**
  * Class Map
  *
- * @package app\helpers
+ * @author Dmitry Mitko <dima@icecat.biz>
  */
 class Map
 {
+    protected const MAX_DISTANCE = 256 * 256 * 256;
+    protected const LIMIT_DISTANCE_BY_COLOR = 25;
+
+    /**
+     * @var array[]
+     */
     protected array $map = [
         ["Ecru", "Ecru", 240, 234, 218],
         ["B5200", "Snow White", 255, 255, 255],
@@ -466,4 +471,175 @@ class Map
         [3865, "Winter White", 249, 247, 241],
         [3866, "Mocha Brn Ult Vy Lt", 250, 246, 240],
     ];
+
+    /**
+     * @var array
+     */
+    protected array $rgbToDMC = [];
+
+    /**
+     * @var array
+     */
+    protected array $mixedRgbToDMC = [];
+
+    /**
+     * Get DMC by rgb
+     *
+     * @param int $r
+     * @param int $g
+     * @param int $b
+     *
+     * @return array
+     */
+    public function getDMC(int $r, int $g, int $b): ?array
+    {
+        $this->loadMap();
+
+        $color = null;
+        $distance = static::MAX_DISTANCE;
+
+        foreach ($this->rgbToDMC as $rgb => $dmc) {
+            [$ri, $gi, $bi] = explode('x', $rgb);
+
+            $currentDistance = $this->distance($ri, $gi, $bi, $r, $g, $b);
+
+            if ($currentDistance < $distance) {
+                $distance = $currentDistance;
+                $color = $dmc;
+            }
+        }
+
+        foreach ($this->mixedRgbToDMC as $rgb => $dmc) {
+            [$ri, $gi, $bi] = explode('x', $rgb);
+
+            $currentDistance = $this->distance($ri, $gi, $bi, $r, $g, $b);
+
+            if ($currentDistance < $distance) {
+                $distance = $currentDistance;
+                $color = $dmc;
+            }
+        }
+
+        return $color;
+    }
+
+    /**
+     * Get distance
+     *
+     * @param int $firstR
+     * @param int $firstG
+     * @param int $firstB
+     * @param int $secondR
+     * @param int $secondG
+     * @param int $secondB
+     *
+     * @return float
+     */
+    protected function distance(int $firstR, int $firstG, int $firstB, int $secondR, int $secondG, int $secondB): float
+    {
+        return sqrt(abs($firstR - $secondR) ** 2 + abs($firstG - $secondG) ** 2 + abs($firstB - $secondB) ** 2);
+    }
+
+    /**
+     * Load map
+     */
+    protected function loadMap(): void
+    {
+        if (!empty($this->rgbToDMC)) {
+            return;
+        }
+
+        // load strict colors
+        foreach ($this->map as $color) {
+            $this->rgbToDMC[$color[2] . 'x' . $color[3] . 'x' . $color[4]] = [
+                [
+                    'code' => $color[0],
+                    'name' => $color[1],
+                    'rgb' => $color[2] . 'x' . $color[3] . 'x' . $color[4],
+                ],
+            ];
+        }
+
+        // load mixed colors
+        foreach ($this->map as $firstColor) {
+            $nearDistance = [];
+            $near = [];
+
+            foreach ($this->map as $secondColor) {
+                if ($firstColor[2] === $secondColor[2] && $firstColor[3] === $secondColor[3] && $firstColor[4] === $secondColor[4]) {
+                    continue;
+                }
+
+                if (abs($firstColor[2] - $secondColor[2]) > static::LIMIT_DISTANCE_BY_COLOR) {
+                    continue;
+                }
+                if (abs($firstColor[3] - $secondColor[3]) > static::LIMIT_DISTANCE_BY_COLOR) {
+                    continue;
+                }
+                if (abs($firstColor[4] - $secondColor[4]) > static::LIMIT_DISTANCE_BY_COLOR) {
+                    continue;
+                }
+
+                $key = $this->nearestKey($firstColor[2], $firstColor[3], $firstColor[4], $secondColor[2], $secondColor[3], $secondColor[4]);
+                $newDistance = $this->distance($firstColor[2], $firstColor[3], $firstColor[4], $secondColor[2], $secondColor[3], $secondColor[4]);
+                $oldDistance = $nearDistance[$key] ?? static::MAX_DISTANCE;
+
+                if ($newDistance < $oldDistance) {
+                    $nearDistance = $newDistance;
+                    $near[$key] = [
+                        'first' => $firstColor[2] . 'x' . $firstColor[3] . 'x' . $firstColor[4],
+                        'second' => $secondColor[2] . 'x' . $secondColor[3] . 'x' . $secondColor[4],
+                        'mixed' => round(($firstColor[2] + $secondColor[2]) / 2) . 'x' . round(($firstColor[3] + $secondColor[3]) / 2) . 'x' . round(($firstColor[4] + $secondColor[4]) / 2),
+                        'distance' => $newDistance,
+                    ];
+                }
+            }
+
+            // add 8 new colors to mixed
+            foreach ($near as $mixes) {
+                if (isset($this->rgbToDMC[$mixes['mixed']])) {
+                    continue;
+                }
+
+                if (isset($this->mixedRgbToDMC[$mixes['mixed']])) {
+                    continue;
+                }
+
+                $this->mixedRgbToDMC[$mixes['mixed']][] = [
+                    'code' => $this->rgbToDMC[$mixes['first']][0]['code'],
+                    'name' => $this->rgbToDMC[$mixes['first']][0]['name'],
+                    'rgb' => $this->rgbToDMC[$mixes['first']][0]['rgb'],
+                ];
+
+                $this->mixedRgbToDMC[$mixes['mixed']][] = [
+                    'code' => $this->rgbToDMC[$mixes['second']][0]['code'],
+                    'name' => $this->rgbToDMC[$mixes['second']][0]['name'],
+                    'rgb' => $this->rgbToDMC[$mixes['second']][0]['rgb'],
+                ];
+            }
+        }
+    }
+
+    /**
+     * Get nearest key
+     *
+     * @param int $firstR
+     * @param int $firstG
+     * @param int $firstB
+     * @param int $secondR
+     * @param int $secondG
+     * @param int $secondB
+     *
+     * @return string
+     */
+    protected function nearestKey(int $firstR, int $firstG, int $firstB, int $secondR, int $secondG, int $secondB): string
+    {
+        $array = [
+            $firstR < $secondR ? '-' : ($firstR > $secondR ? '+' : '0'),
+            $firstG < $secondG ? '-' : ($firstG > $secondG ? '+' : '0'),
+            $firstB < $secondB ? '-' : ($firstB > $secondB ? '+' : '0'),
+        ];
+
+        return implode('', $array);
+    }
 }

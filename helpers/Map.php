@@ -483,6 +483,11 @@ class Map
     protected array $mixedRgbToDMC = [];
 
     /**
+     * @var array
+     */
+    protected array $cache = [];
+
+    /**
      * Get DMC by rgb
      *
      * @param int $r
@@ -494,6 +499,12 @@ class Map
     public function getDMC(int $r, int $g, int $b): ?array
     {
         $this->loadMap();
+
+        $key = implode('x', [$r, $g, $b]);
+
+        if (isset($this->cache[$key])) {
+            return $this->cache[$key];
+        }
 
         $color = null;
         $distance = static::MAX_DISTANCE;
@@ -519,6 +530,8 @@ class Map
                 $color = $dmc;
             }
         }
+
+        $this->cache[$key] = $color;
 
         return $color;
     }
@@ -551,12 +564,10 @@ class Map
 
         // load strict colors
         foreach ($this->map as $color) {
-            $this->rgbToDMC[$color[2] . 'x' . $color[3] . 'x' . $color[4]] = [
-                [
-                    'code' => $color[0],
-                    'name' => $color[1],
-                    'rgb' => $color[2] . 'x' . $color[3] . 'x' . $color[4],
-                ],
+            $this->rgbToDMC[$color[2] . 'x' . $color[3] . 'x' . $color[4]][] = [
+                'code' => 'DMC ' . $color[0],
+                'name' => $color[1],
+                'rgb' => $color[2] . 'x' . $color[3] . 'x' . $color[4],
             ];
         }
 
@@ -604,6 +615,12 @@ class Map
                 if (isset($this->mixedRgbToDMC[$mixes['mixed']])) {
                     continue;
                 }
+
+                $this->mixedRgbToDMC[$mixes['mixed']][] = [
+                    'rgb' => $mixes['mixed'],
+                    'code' => $this->rgbToDMC[$mixes['first']][0]['code'] . ' + ' . $this->rgbToDMC[$mixes['second']][0]['code'],
+                    'name' => $this->rgbToDMC[$mixes['first']][0]['name'] . ' + ' . $this->rgbToDMC[$mixes['second']][0]['name'],
+                ];
 
                 $this->mixedRgbToDMC[$mixes['mixed']][] = [
                     'code' => $this->rgbToDMC[$mixes['first']][0]['code'],

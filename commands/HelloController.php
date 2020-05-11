@@ -1,12 +1,8 @@
 <?php
-/**
- * @link http://www.yiiframework.com/
- * @copyright Copyright (c) 2008 Yii Software LLC
- * @license http://www.yiiframework.com/license/
- */
 
 namespace app\commands;
 
+use app\helpers\Image;
 use app\helpers\Map;
 use yii\console\Controller;
 use yii\console\ExitCode;
@@ -53,5 +49,36 @@ class HelloController extends Controller
             print "name: " . $colors['name'] . "\n";
             print " rgb: " . $colors['rgb'] . "\n";
         }
+    }
+
+    /**
+     * Prepare cross-stitch
+     *
+     * @param string $inputFile
+     *
+     * @throws \Exception
+     */
+    public function actionPrepareImage(string $inputFile): void
+    {
+        print "Start cross-stitch\n";
+
+        if (!file_exists($inputFile)) {
+            throw new \Exception('File ' . $inputFile . ' is absent');
+        }
+
+        print "\tinput file: " . $inputFile . "\n";
+
+        $outputFile = $inputFile . '.new.bmp';
+        $outputTextFile = $inputFile . '.new.txt';
+
+        $image = new Image();
+        $image->setInputFile($inputFile);
+        $image->setOutputFile($outputFile);
+        $image->setOutputTextFile($outputTextFile);
+        $image->execute();
+
+        print "\toutput file: " . $outputFile . "\n";
+
+        print "End cross-stitch\n";
     }
 }

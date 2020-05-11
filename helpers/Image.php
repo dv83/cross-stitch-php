@@ -50,6 +50,11 @@ class Image
     protected array $simpleReport = [];
 
     /**
+     * @var array [ rgb => [x1, y1], ... ]
+     */
+    protected array $rgbList = [];
+
+    /**
      * Execute image
      */
     public function execute(): void
@@ -60,16 +65,16 @@ class Image
         $width = imagesx($inputImage);
         $height = imagesy($inputImage);
 
-        $outputImage = imagecreatetruecolor($width, $height);
+        $minCrosses = round($width * $height / 1000);
 
         $map = new Map();
         if ($this->mixedMode) {
             $map->setMixed(true);
         }
 
-        for ($x = 0; $x < $width; $x++) {
-            print $x . ' or ' . $width . "\n";
+        print "\tread image\n";
 
+        for ($x = 0; $x < $width; $x++) {
             for ($y = 0; $y < $height; $y++) {
                 // get pixel
                 [$r, $g, $b] = $this->indexToRgb(imagecolorat($inputImage, $x, $y));
@@ -80,38 +85,92 @@ class Image
                 if ($this->chessMode && count($mappedData) !== 1) {
                     $i = ($x + $y) % 2 === 0 ? 1 : 2;
                 }
-                [$nr, $ng, $nb] = explode('x', $mappedData[$i]['rgb']);
 
-                // report
-                if (!isset($this->report[$mappedData[$i]['code']])) {
-                    $this->report[$mappedData[$i]['code']] = 1;
+                // rgb list
+                $this->rgbList[$mappedData[$i]['rgb']][] = [$x, $y];
+            }
+        }
+
+        print "\tcollect >=" . $minCrosses . " rgbs\n";
+
+        $newRgbList = [];
+
+        // reorganize rare rgb
+        $rgbList100 = [];
+        foreach ($this->rgbList as $rgb => $list) {
+            if (count($list) >= $minCrosses) {
+                foreach ($list as $pair) {
+                    $newRgbList[$rgb][] = $pair;
+                }
+
+                $rgbList100[] = $rgb;
+            }
+        }
+        $map->reduceMap($rgbList100);
+
+        print "\treplace <" . $minCrosses . " with >=" . $minCrosses . " rgbs\n";
+
+        // replace rare rgb with often rgb
+        foreach ($this->rgbList as $rgb => $list) {
+            if (count($list) >= $minCrosses) {
+                continue;
+            }
+
+            [$r, $g, $b] = explode('x', $rgb);
+            $mappedData = $map->getDMCColor($r, $g, $b);
+            $newRgb = $mappedData[0]['rgb'];
+
+            // join 2 arrays and remove old array
+            foreach ($list as $pair) {
+                $newRgbList[$newRgb][] = $pair;
+            }
+        }
+
+        print "\twrite image\n";
+
+        // output file
+        $outputImage = imagecreatetruecolor($width, $height);
+
+        // prepare report
+        foreach ($newRgbList as $rgb => $list) {
+            if (count($list) === 0) {
+                continue;
+            }
+
+            $mappedData = $map->getColor($rgb);
+
+            // report
+            if (isset($this->report[$mappedData[0]['code']])) {
+                $this->report[$mappedData[0]['code']] += count($list);
+            } else {
+                $this->report[$mappedData[0]['code']] = count($list);
+            }
+
+            // simple report
+            if (count($mappedData) > 1) { // mixed cross
+                if (isset($this->simpleReport[$mappedData[1]['code']])) {
+                    $this->simpleReport[$mappedData[1]['code']] += round(count($list) / 2);
                 } else {
-                    $this->report[$mappedData[$i]['code']]++;
+                    $this->simpleReport[$mappedData[1]['code']] = round(count($list) / 2);
                 }
 
-                // simple report
-                if (count($mappedData) > 1) { // mixed cross
-                    if (!isset($this->simpleReport[$mappedData[1]['code']])) {
-                        $this->simpleReport[$mappedData[1]['code']] = 0.5;
-                    } else {
-                        $this->simpleReport[$mappedData[1]['code']] += 0.5;
-                    }
-
-                    if (!isset($this->simpleReport[$mappedData[2]['code']])) {
-                        $this->simpleReport[$mappedData[2]['code']] = 0.5;
-                    } else {
-                        $this->simpleReport[$mappedData[2]['code']] += 0.5;
-                    }
-                } else { // simple cross
-                    if (!isset($this->simpleReport[$mappedData[0]['code']])) {
-                        $this->simpleReport[$mappedData[0]['code']] = 1;
-                    } else {
-                        $this->simpleReport[$mappedData[0]['code']]++;
-                    }
+                if (isset($this->simpleReport[$mappedData[2]['code']])) {
+                    $this->simpleReport[$mappedData[2]['code']] += round(count($list) / 2);
+                } else {
+                    $this->simpleReport[$mappedData[2]['code']] = round(count($list) / 2);
                 }
+            } else { // simple cross
+                if (isset($this->simpleReport[$mappedData[0]['code']])) {
+                    $this->simpleReport[$mappedData[0]['code']] += count($list);
+                } else {
+                    $this->simpleReport[$mappedData[0]['code']] = count($list);
+                }
+            }
 
-                // set pixel
-                $color = imagecolorallocate($outputImage, $nr, $ng, $nb);
+            // set pixel
+            [$r, $g, $b] = explode('x', $rgb);
+            $color = imagecolorallocate($outputImage, $r, $g, $b);
+            foreach ($list as [$x, $y]) {
                 imagesetpixel($outputImage, $x, $y, $color);
             }
         }
@@ -121,26 +180,20 @@ class Image
 
         // preparing report
         $textFile = fopen($this->outputReportFile, 'w');
-
         asort($this->report);
-
         foreach (array_reverse($this->report) as $code => $number) {
             $code = str_repeat(' ', (30 - strlen($code))) . $code;
-            fwrite($textFile, $code . ': ' . $number . "\r\n");
+            fwrite($textFile, $code . ': ' . round($number) . "\r\n");
         }
-
         fclose($textFile);
 
         // preparing report
         $textFileTwo = fopen($this->outputReportTwoFile, 'w');
-
         asort($this->simpleReport);
-
         foreach (array_reverse($this->simpleReport) as $code => $number) {
             $code = str_repeat(' ', (30 - strlen($code))) . $code;
             fwrite($textFileTwo, $code . ': ' . round($number) . "\r\n");
         }
-
         fclose($textFileTwo);
     }
 

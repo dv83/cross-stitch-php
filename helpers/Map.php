@@ -9,7 +9,7 @@ namespace app\helpers;
  */
 class Map
 {
-    protected const MAX_DISTANCE = 256 * 256 * 256;
+    protected const MAX_DISTANCE = 450;
     protected const LIMIT_DISTANCE_BY_COLOR = 50;
 
     /**
@@ -493,6 +493,20 @@ class Map
     protected array $cache = [];
 
     /**
+     * Get strict DMC by rgb
+     *
+     * @param string $rgb
+     *
+     * @return array
+     */
+    public function getColor(string $rgb): array
+    {
+        $this->loadMap();
+
+        return $this->rgbToDMC[$rgb] ?? $this->mixedRgbToDMC[$rgb] ?? [];
+    }
+
+    /**
      * Get DMC by rgb
      *
      * @param int $r
@@ -637,6 +651,30 @@ class Map
                 ];
             }
         }
+    }
+
+    /**
+     * Reduce rgb list
+     *
+     * @param array $rgbList
+     */
+    public function reduceMap(array $rgbList): void
+    {
+        $rgbListKeys = array_flip($rgbList);
+
+        foreach ($this->rgbToDMC as $rgb => $data) {
+            if (!isset($rgbListKeys[$rgb])) {
+                unset($this->rgbToDMC[$rgb]);
+            }
+        }
+
+        foreach ($this->mixedRgbToDMC as $rgb => $data) {
+            if (!isset($rgbListKeys[$rgb])) {
+                unset($this->mixedRgbToDMC[$rgb]);
+            }
+        }
+
+        $this->cache = [];
     }
 
     /**

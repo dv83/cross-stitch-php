@@ -22,17 +22,37 @@ class Image
     /**
      * @var string
      */
-    protected string $outputTextFile = '';
+    protected string $outputReportFile = '';
 
     /**
-     * @var array
+     * @var string
+     */
+    protected string $outputReportTwoFile = '';
+
+    /**
+     * @var bool
+     */
+    protected bool $chessMode = false;
+
+    /**
+     * @var bool
+     */
+    protected bool $mixedMode = true;
+
+    /**
+     * @var array [ code => number of crosses ]
      */
     protected array $report = [];
 
     /**
+     * @var array [ simple code => number of crosses ]
+     */
+    protected array $simpleReport = [];
+
+    /**
      * Execute image
      */
-    public function execute()
+    public function execute(): void
     {
         // output file
         $inputImage = imagecreatefromjpeg($this->inputFile);
@@ -43,24 +63,24 @@ class Image
         $outputImage = imagecreatetruecolor($width, $height);
 
         $map = new Map();
+        if ($this->mixedMode) {
+            $map->setMixed(true);
+        }
 
         for ($x = 0; $x < $width; $x++) {
             print $x . ' or ' . $width . "\n";
 
             for ($y = 0; $y < $height; $y++) {
                 // get pixel
-                [$r, $g, $b] = $this->indextoRgb(imagecolorat($inputImage, $x, $y));
+                [$r, $g, $b] = $this->indexToRgb(imagecolorat($inputImage, $x, $y));
 
                 // get mapped rgb
-                $mappedData = $map->getDMC($r, $g, $b);
+                $mappedData = $map->getDMCColor($r, $g, $b);
                 $i = 0;
-                //if (count($mappedData) === 1) {
-                    $rgb = $mappedData[$i]['rgb'];
-                //} else {
-                //    $i = ($x + $y) % 2 === 0 ? 1 : 2;
-                //    $rgb = $mappedData[$i]['rgb'];
-                //}
-                [$nr, $ng, $nb] = explode('x', $rgb);
+                if ($this->chessMode && count($mappedData) !== 1) {
+                    $i = ($x + $y) % 2 === 0 ? 1 : 2;
+                }
+                [$nr, $ng, $nb] = explode('x', $mappedData[$i]['rgb']);
 
                 // report
                 if (!isset($this->report[$mappedData[$i]['code']])) {
@@ -69,16 +89,38 @@ class Image
                     $this->report[$mappedData[$i]['code']]++;
                 }
 
+                // simple report
+                if (count($mappedData) > 1) { // mixed cross
+                    if (!isset($this->simpleReport[$mappedData[1]['code']])) {
+                        $this->simpleReport[$mappedData[1]['code']] = 0.5;
+                    } else {
+                        $this->simpleReport[$mappedData[1]['code']] += 0.5;
+                    }
+
+                    if (!isset($this->simpleReport[$mappedData[2]['code']])) {
+                        $this->simpleReport[$mappedData[2]['code']] = 0.5;
+                    } else {
+                        $this->simpleReport[$mappedData[2]['code']] += 0.5;
+                    }
+                } else { // simple cross
+                    if (!isset($this->simpleReport[$mappedData[0]['code']])) {
+                        $this->simpleReport[$mappedData[0]['code']] = 1;
+                    } else {
+                        $this->simpleReport[$mappedData[0]['code']]++;
+                    }
+                }
+
                 // set pixel
                 $color = imagecolorallocate($outputImage, $nr, $ng, $nb);
                 imagesetpixel($outputImage, $x, $y, $color);
             }
         }
 
+        // write image
         imagebmp($outputImage, $this->outputFile);
 
-        // report
-        $textFile = fopen($this->outputTextFile, 'w');
+        // preparing report
+        $textFile = fopen($this->outputReportFile, 'w');
 
         asort($this->report);
 
@@ -88,6 +130,18 @@ class Image
         }
 
         fclose($textFile);
+
+        // preparing report
+        $textFileTwo = fopen($this->outputReportTwoFile, 'w');
+
+        asort($this->simpleReport);
+
+        foreach (array_reverse($this->simpleReport) as $code => $number) {
+            $code = str_repeat(' ', (30 - strlen($code))) . $code;
+            fwrite($textFileTwo, $code . ': ' . round($number) . "\r\n");
+        }
+
+        fclose($textFileTwo);
     }
 
     /**
@@ -97,7 +151,7 @@ class Image
      *
      * @return int[]
      */
-    protected function indextoRgb(int $rgb)
+    protected function indexToRgb(int $rgb): array
     {
         $r = ($rgb >> 16) & 0xFF;
         $g = ($rgb >> 8) & 0xFF;
@@ -114,23 +168,24 @@ class Image
     public function setInputFile(string $inputFile): void
     {
         $this->inputFile = $inputFile;
+        $this->outputFile = $inputFile . '.new.bmp';
+        $this->outputReportFile = $inputFile . '.report.txt';
+        $this->outputReportTwoFile = $inputFile . '.reportTwo.txt';
     }
 
     /**
-     * Set output file
-     *
-     * @param string $outputFile
+     * @param bool $chessMode
      */
-    public function setOutputFile(string $outputFile): void
+    public function setChessMode(bool $chessMode): void
     {
-        $this->outputFile = $outputFile;
+        $this->chessMode = $chessMode;
     }
 
     /**
-     * @param string $outputTextFile
+     * @param bool $mixedMode
      */
-    public function setOutputTextFile(string $outputTextFile): void
+    public function setMixedMode(bool $mixedMode): void
     {
-        $this->outputTextFile = $outputTextFile;
+        $this->mixedMode = $mixedMode;
     }
 }

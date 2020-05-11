@@ -41,7 +41,7 @@ class HelloController extends Controller
     public function actionMap(int $r, int $g, int $b)
     {
         $map = new Map();
-        $result = $map->getDMC($r, $g, $b);
+        $result = $map->getDMCColor($r, $g, $b);
 
         foreach ($result as $colors) {
             print "\n";
@@ -55,10 +55,12 @@ class HelloController extends Controller
      * Prepare cross-stitch
      *
      * @param string $inputFile
+     * @param bool $chessMode
+     * @param bool $mixedMode
      *
      * @throws \Exception
      */
-    public function actionPrepareImage(string $inputFile): void
+    public function actionPrepareImage(string $inputFile, bool $chessMode = false, bool $mixedMode = false): void
     {
         print "Start cross-stitch\n";
 
@@ -68,16 +70,16 @@ class HelloController extends Controller
 
         print "\tinput file: " . $inputFile . "\n";
 
-        $outputFile = $inputFile . '.new.bmp';
-        $outputTextFile = $inputFile . '.new.txt';
+        print "\tchess mode: " . ($chessMode ? 'TRUE' : 'FALSE') . "\n";
+        print "\tmixed mode: " . ($mixedMode ? 'TRUE' : 'FALSE') . "\n";
 
         $image = new Image();
         $image->setInputFile($inputFile);
-        $image->setOutputFile($outputFile);
-        $image->setOutputTextFile($outputTextFile);
+        $image->setChessMode($chessMode);
+        $image->setMixedMode($mixedMode);
         $image->execute();
 
-        print "\toutput file: " . $outputFile . "\n";
+        print "\toutput file: " . $inputFile . ".new.bmp\n";
 
         print "End cross-stitch\n";
     }

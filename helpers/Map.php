@@ -10,7 +10,7 @@ namespace app\helpers;
 class Map
 {
     protected const MAX_DISTANCE = 256 * 256 * 256;
-    protected const LIMIT_DISTANCE_BY_COLOR = 25;
+    protected const LIMIT_DISTANCE_BY_COLOR = 50;
 
     /**
      * @var array[]
@@ -473,6 +473,11 @@ class Map
     ];
 
     /**
+     * @var bool
+     */
+    protected bool $mixed = false;
+
+    /**
      * @var array
      */
     protected array $rgbToDMC = [];
@@ -496,7 +501,7 @@ class Map
      *
      * @return array
      */
-    public function getDMC(int $r, int $g, int $b): ?array
+    public function getDMCColor(int $r, int $g, int $b): ?array
     {
         $this->loadMap();
 
@@ -520,14 +525,16 @@ class Map
             }
         }
 
-        foreach ($this->mixedRgbToDMC as $rgb => $dmc) {
-            [$ri, $gi, $bi] = explode('x', $rgb);
+        if ($this->mixed) {
+            foreach ($this->mixedRgbToDMC as $rgb => $dmc) {
+                [$ri, $gi, $bi] = explode('x', $rgb);
 
-            $currentDistance = $this->distance($ri, $gi, $bi, $r, $g, $b);
+                $currentDistance = $this->distance($ri, $gi, $bi, $r, $g, $b);
 
-            if ($currentDistance < $distance) {
-                $distance = $currentDistance;
-                $color = $dmc;
+                if ($currentDistance < $distance) {
+                    $distance = $currentDistance;
+                    $color = $dmc;
+                }
             }
         }
 
@@ -564,10 +571,11 @@ class Map
 
         // load strict colors
         foreach ($this->map as $color) {
-            $this->rgbToDMC[$color[2] . 'x' . $color[3] . 'x' . $color[4]][] = [
+            $key = $color[2] . 'x' . $color[3] . 'x' . $color[4];
+            $this->rgbToDMC[$key][] = [
                 'code' => 'DMC ' . $color[0],
                 'name' => $color[1],
-                'rgb' => $color[2] . 'x' . $color[3] . 'x' . $color[4],
+                'rgb' => $key,
             ];
         }
 
@@ -581,22 +589,16 @@ class Map
                     continue;
                 }
 
-                if (abs($firstColor[2] - $secondColor[2]) > static::LIMIT_DISTANCE_BY_COLOR) {
-                    continue;
-                }
-                if (abs($firstColor[3] - $secondColor[3]) > static::LIMIT_DISTANCE_BY_COLOR) {
-                    continue;
-                }
-                if (abs($firstColor[4] - $secondColor[4]) > static::LIMIT_DISTANCE_BY_COLOR) {
+                $newDistance = $this->distance($firstColor[2], $firstColor[3], $firstColor[4], $secondColor[2], $secondColor[3], $secondColor[4]);
+                if ($newDistance > static::LIMIT_DISTANCE_BY_COLOR) {
                     continue;
                 }
 
                 $key = $this->nearestKey($firstColor[2], $firstColor[3], $firstColor[4], $secondColor[2], $secondColor[3], $secondColor[4]);
-                $newDistance = $this->distance($firstColor[2], $firstColor[3], $firstColor[4], $secondColor[2], $secondColor[3], $secondColor[4]);
                 $oldDistance = $nearDistance[$key] ?? static::MAX_DISTANCE;
 
                 if ($newDistance < $oldDistance) {
-                    $nearDistance = $newDistance;
+                    $nearDistance[$key] = $newDistance;
                     $near[$key] = [
                         'first' => $firstColor[2] . 'x' . $firstColor[3] . 'x' . $firstColor[4],
                         'second' => $secondColor[2] . 'x' . $secondColor[3] . 'x' . $secondColor[4],
@@ -652,11 +654,19 @@ class Map
     protected function nearestKey(int $firstR, int $firstG, int $firstB, int $secondR, int $secondG, int $secondB): string
     {
         $array = [
-            $firstR < $secondR ? '-' : ($firstR > $secondR ? '+' : '0'),
-            $firstG < $secondG ? '-' : ($firstG > $secondG ? '+' : '0'),
-            $firstB < $secondB ? '-' : ($firstB > $secondB ? '+' : '0'),
+            $firstR < $secondR ? '-' : '+',
+            $firstG < $secondG ? '-' : '+',
+            $firstB < $secondB ? '-' : '+',
         ];
 
         return implode('', $array);
+    }
+
+    /**
+     * @param bool $mixed
+     */
+    public function setMixed(bool $mixed): void
+    {
+        $this->mixed = $mixed;
     }
 }

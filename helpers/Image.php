@@ -2,6 +2,9 @@
 
 namespace app\helpers;
 
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+
 /**
  * Class Image
  *
@@ -9,6 +12,8 @@ namespace app\helpers;
  */
 class Image
 {
+    protected const CELL_SIZE = 16;
+
     /**
      * @var string
      */
@@ -28,6 +33,11 @@ class Image
      * @var string
      */
     protected string $outputReportTwoFile = '';
+
+    /**
+     * @var string
+     */
+    protected string $outputXlsxFile = '';
 
     /**
      * @var bool
@@ -65,7 +75,7 @@ class Image
         $width = imagesx($inputImage);
         $height = imagesy($inputImage);
 
-        $minCrosses = round($width * $height / 1000);
+        $minCrosses = round($width * $height / 2000);
 
         $map = new Map();
         if ($this->mixedMode) {
@@ -130,6 +140,17 @@ class Image
 
         // output file
         $outputImage = imagecreatetruecolor($width, $height);
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        for ($y = 0; $y < $height; $y++) {
+            $sheet->getRowDimension($y + 1)->setRowHeight(static::CELL_SIZE);
+        }
+        for ($x = 0; $x < $width; $x++) {
+            $sheet->getColumnDimensionByColumn($x + 1)->setWidth((int)static::CELL_SIZE / 5);
+            $sheet->getColumnDimensionByColumn($x + 1)->setAutoSize(false);
+        }
+        $marker = new Marker();
+        $mapCodeToMarker = [];
 
         // prepare report
         foreach ($newRgbList as $rgb => $list) {
@@ -170,29 +191,60 @@ class Image
             // set pixel
             [$r, $g, $b] = explode('x', $rgb);
             $color = imagecolorallocate($outputImage, $r, $g, $b);
+            $newMarker = $marker->next();
+
+            // legend
+            $mapCodeToMarker[$mappedData[0]['code']] = $newMarker;
+
             foreach ($list as [$x, $y]) {
                 imagesetpixel($outputImage, $x, $y, $color);
+                $sheet->setCellValueByColumnAndRow($x + 1, $y + 1, $newMarker['value']);
+                $sheet->getStyleByColumnAndRow($x + 1, $y + 1)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB($newMarker['color']);
+                $sheet->getStyleByColumnAndRow($x + 1, $y + 1)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyleByColumnAndRow($x + 1, $y + 1)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
             }
         }
 
         // write image
         imagebmp($outputImage, $this->outputFile);
 
+        $legend = $spreadsheet->createSheet();
+        $legendRow = 1;
+
         // preparing report
         $textFile = fopen($this->outputReportFile, 'w');
         asort($this->report);
         foreach (array_reverse($this->report) as $code => $number) {
+            $legend->setCellValueByColumnAndRow(1, $legendRow, $mapCodeToMarker[$code]['value']);
+            $legend->getStyleByColumnAndRow(1, $legendRow)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB($mapCodeToMarker[$code]['color']);
+            $legend->getStyleByColumnAndRow(1, $legendRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+            $legend->setCellValueByColumnAndRow(2, $legendRow, $code);
+            $legend->setCellValueByColumnAndRow(3, $legendRow, round($number));
+            $legendRow++;
+
             $code = str_repeat(' ', (30 - strlen($code))) . $code;
             fwrite($textFile, $code . ': ' . round($number) . "\r\n");
         }
         fclose($textFile);
 
-        // preparing report
+        $legend->getColumnDimensionByColumn(2)->setAutoSize(true);
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
+        $writer->save($this->outputXlsxFile);
+
+        // calc object
+        $calc = (new Calculator())->setCanvasSize(20)->setThreadsNumber(2);
+
+        // preparing simple report
         $textFileTwo = fopen($this->outputReportTwoFile, 'w');
         asort($this->simpleReport);
         foreach (array_reverse($this->simpleReport) as $code => $number) {
             $code = str_repeat(' ', (30 - strlen($code))) . $code;
-            fwrite($textFileTwo, $code . ': ' . round($number) . "\r\n");
+            $number = round($number);
+            $number = str_repeat(' ', (7 - strlen($number))) . $number;
+            $calcReport = $calc->setCrossCount($number)->calculate();
+            fwrite($textFileTwo, $code . ': ' . $number . " (" . $calcReport['length'] . " m, " . $calcReport['pasmas'] . ")\r\n");
         }
         fclose($textFileTwo);
     }
@@ -224,6 +276,7 @@ class Image
         $this->outputFile = $inputFile . '.new.bmp';
         $this->outputReportFile = $inputFile . '.report.txt';
         $this->outputReportTwoFile = $inputFile . '.reportTwo.txt';
+        $this->outputXlsxFile = $inputFile . '.xlsx';
     }
 
     /**

@@ -149,8 +149,10 @@ class Image
             $sheet->getColumnDimensionByColumn($x + 1)->setWidth((int)static::CELL_SIZE / 5);
             $sheet->getColumnDimensionByColumn($x + 1)->setAutoSize(false);
         }
+
         $marker = new Marker();
         $mapCodeToMarker = [];
+        $mapCodeToRgb = [];
 
         // prepare report
         foreach ($newRgbList as $rgb => $list) {
@@ -158,13 +160,18 @@ class Image
                 continue;
             }
 
-            $mappedData = $map->getColor($rgb);
+            $mappedData = $map->getStrictDMCColor($rgb);
 
             // report
             if (isset($this->report[$mappedData[0]['code']])) {
                 $this->report[$mappedData[0]['code']] += count($list);
             } else {
                 $this->report[$mappedData[0]['code']] = count($list);
+                $mapCodeToRgb[$mappedData[0]['code']] = [
+                    'hexRgb' => $mappedData[0]['rgb'],
+                    'hexRgb1' => $mappedData[1]['rgb'] ?? null,
+                    'hexRgb2' => $mappedData[2]['rgb'] ?? null,
+                ];
             }
 
             // simple report
@@ -199,6 +206,7 @@ class Image
             foreach ($list as [$x, $y]) {
                 imagesetpixel($outputImage, $x, $y, $color);
                 $sheet->setCellValueByColumnAndRow($x + 1, $y + 1, $newMarker['value']);
+                $sheet->getStyleByColumnAndRow($x + 1, $y + 1)->getFont()->getColor()->setRGB($newMarker['fontColor']);
                 $sheet->getStyleByColumnAndRow($x + 1, $y + 1)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB($newMarker['color']);
                 $sheet->getStyleByColumnAndRow($x + 1, $y + 1)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
                 $sheet->getStyleByColumnAndRow($x + 1, $y + 1)->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
@@ -209,17 +217,33 @@ class Image
         imagebmp($outputImage, $this->outputFile);
 
         $legend = $spreadsheet->createSheet();
-        $legendRow = 1;
+        $legendRow = 2;
 
         // preparing report
         $textFile = fopen($this->outputReportFile, 'w');
         asort($this->report);
+
+        $legend->setCellValueByColumnAndRow(1, 1, 'symbol');
+        $legend->setCellValueByColumnAndRow(2, 1, 'code');
+        $legend->setCellValueByColumnAndRow(3, 1, 'number');
+        $legend->setCellValueByColumnAndRow(4, 1, 'rgb');
+        $legend->setCellValueByColumnAndRow(5, 1, 'rgb1');
+        $legend->setCellValueByColumnAndRow(6, 1, 'rgb2');
+
         foreach (array_reverse($this->report) as $code => $number) {
             $legend->setCellValueByColumnAndRow(1, $legendRow, $mapCodeToMarker[$code]['value']);
+            $legend->getStyleByColumnAndRow(1, $legendRow)->getFont()->getColor()->setRGB($mapCodeToMarker[$code]['fontColor']);
             $legend->getStyleByColumnAndRow(1, $legendRow)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB($mapCodeToMarker[$code]['color']);
             $legend->getStyleByColumnAndRow(1, $legendRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
             $legend->setCellValueByColumnAndRow(2, $legendRow, $code);
             $legend->setCellValueByColumnAndRow(3, $legendRow, round($number));
+            $legend->getStyleByColumnAndRow(4, $legendRow)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB(Converter::rgbToHexRgb($mapCodeToRgb[$code]['hexRgb']));
+            if ($mapCodeToRgb[$code]['hexRgb1']) {
+                $legend->getStyleByColumnAndRow(5, $legendRow)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB(Converter::rgbToHexRgb($mapCodeToRgb[$code]['hexRgb1']));
+            }
+            if ($mapCodeToRgb[$code]['hexRgb2']) {
+                $legend->getStyleByColumnAndRow(6, $legendRow)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB(Converter::rgbToHexRgb($mapCodeToRgb[$code]['hexRgb2']));
+            }
             $legendRow++;
 
             $code = str_repeat(' ', (30 - strlen($code))) . $code;

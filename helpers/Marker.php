@@ -9,30 +9,26 @@ namespace app\helpers;
  */
 class Marker
 {
+    protected const WHITE_FONT = [
+        '000000',
+        '0000FF',
+    ];
     protected const COLORS = [
         'CCCC00',
-        '996600',
-        'CC6600',
-        'FF6666',
-        '996666',
-        'CC3399',
-        '9900FF',
-        'BBBBBB',
-        '6699CC',
-        '33CC66',
-        'CCFF00',
-        '777777',
+        'FFFF66',
+        'CC0000',
+        'FFAAAA',
+        'FF00FF',
+        '7777FF',
+        '0000FF',
+        '99FFCC',
+        '339966',
+        'CCCCCC',
+        '666666',
         'FFFFFF',
+        '000000',
     ];
     protected const MARKERS = [
-        '#',
-        '=',
-        '+',
-        '%',
-        '(',
-        ')',
-        ':',
-        '@',
         '1',
         '2',
         '3',
@@ -67,6 +63,38 @@ class Marker
         'X',
         'Y',
         'Z',
+        'Б',
+        'Г',
+        'Д',
+        'Ж',
+        'И',
+        'Л',
+        'У',
+        'Ф',
+        'Ш',
+        'Ы',
+        'Э',
+        'Ю',
+        'Я',
+        '\\',
+        '/',
+        '?',
+        '№',
+        '[',
+        ']',
+        '{',
+        '}',
+        '"',
+        '|',
+        '#',
+        '=',
+        '+',
+        '%',
+        '(',
+        ')',
+        ':',
+        '@',
+        '~',
     ];
 
     /**
@@ -87,6 +115,7 @@ class Marker
         $output = [
             'value' => static::MARKERS[$this->markerIndex],
             'color' => static::COLORS[$this->colorIndex],
+            'fontColor' => in_array(static::COLORS[$this->colorIndex], static::WHITE_FONT) ? 'FFFFFF' : '000000',
         ];
 
         $this->markerIndex++;

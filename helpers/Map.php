@@ -10,7 +10,7 @@ namespace app\helpers;
 class Map
 {
     protected const MAX_DISTANCE = 450;
-    protected const LIMIT_DISTANCE_BY_COLOR = 50;
+    protected const LIMIT_DISTANCE_BY_COLOR = 35;
 
     /**
      * @var array[]
@@ -499,7 +499,7 @@ class Map
      *
      * @return array
      */
-    public function getColor(string $rgb): array
+    public function getStrictDMCColor(string $rgb): array
     {
         $this->loadMap();
 
@@ -595,7 +595,6 @@ class Map
 
         // load mixed colors
         foreach ($this->map as $firstColor) {
-            $nearDistance = [];
             $near = [];
 
             foreach ($this->map as $secondColor) {
@@ -608,22 +607,20 @@ class Map
                     continue;
                 }
 
-                $key = $this->nearestKey($firstColor[2], $firstColor[3], $firstColor[4], $secondColor[2], $secondColor[3], $secondColor[4]);
-                $oldDistance = $nearDistance[$key] ?? static::MAX_DISTANCE;
+                $mixed = round(($firstColor[2] + $secondColor[2]) / 2) . 'x' . round(($firstColor[3] + $secondColor[3]) / 2) . 'x' . round(($firstColor[4] + $secondColor[4]) / 2);
 
-                if ($newDistance < $oldDistance) {
-                    $nearDistance[$key] = $newDistance;
-                    $near[$key] = [
+                if ((isset($near[$mixed]) && $near[$mixed]['distance'] > $newDistance) || !isset($near[$mixed])) {
+                    $near[$mixed] = [
                         'first' => $firstColor[2] . 'x' . $firstColor[3] . 'x' . $firstColor[4],
                         'second' => $secondColor[2] . 'x' . $secondColor[3] . 'x' . $secondColor[4],
-                        'mixed' => round(($firstColor[2] + $secondColor[2]) / 2) . 'x' . round(($firstColor[3] + $secondColor[3]) / 2) . 'x' . round(($firstColor[4] + $secondColor[4]) / 2),
+                        'mixed' => $mixed,
                         'distance' => $newDistance,
                     ];
                 }
             }
 
             // add 8 new colors to mixed
-            foreach ($near as $mixes) {
+            foreach ($near as $mixed => $mixes) {
                 if (isset($this->rgbToDMC[$mixes['mixed']])) {
                     continue;
                 }
@@ -675,29 +672,6 @@ class Map
         }
 
         $this->cache = [];
-    }
-
-    /**
-     * Get nearest key
-     *
-     * @param int $firstR
-     * @param int $firstG
-     * @param int $firstB
-     * @param int $secondR
-     * @param int $secondG
-     * @param int $secondB
-     *
-     * @return string
-     */
-    protected function nearestKey(int $firstR, int $firstG, int $firstB, int $secondR, int $secondG, int $secondB): string
-    {
-        $array = [
-            $firstR < $secondR ? '-' : '+',
-            $firstG < $secondG ? '-' : '+',
-            $firstB < $secondB ? '-' : '+',
-        ];
-
-        return implode('', $array);
     }
 
     /**
